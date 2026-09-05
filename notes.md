@@ -1,57 +1,75 @@
-# Data Cleaning & Preprocessing Notes
+# BC Tourism Data Pipeline - Cleaning & Preprocessing Notes
 
-## Project Datasets Summary
-* `ABMS_REGIONAL_DISTRICTS_SP.gpkg` (Spatial Boundaries)
-* `laep-average-incomes-by-area.csv` (Regional Sector Income Data)
-* `monthly_tourism_indicators.csv` (High-Frequency Monthly Time Series)
-* `bc_stats_tourism_annual_indicators_tables_2026.csv` (Macro Provincial Trends)
+## Pipeline Overview
+The data pipeline standardizes, cleans, and transforms raw BC tourism and macro-economic datasets into normalized, long-format CSVs and clean spatial layers in `data/processed/`. The entire process is executed via `clean_data.py`.
 
 ---
 
-## 1. GeoPackage Boundaries (`ABMS_REGIONAL_DISTRICTS_SP.gpkg`)
-* **CRS Alignment:** Confirm projection is set to `EPSG:3005` (BC Albers Equal Area).
-* **Key Spatial Identifier:** The column `ADMIN_AREA_NAME` contains the 28 official regional district names (e.g., `Metro Vancouver Regional District`, `Capital Regional District`).
-* **Name Standardizations for Join:**
-  * Map `Capital` -> `Capital Regional District`
-  * Map `Metro Vancouver` -> `Metro Vancouver Regional District`
-  * Map `Nanaimo RD` -> `Regional District of Nanaimo`
-  * Map `Powell River RD` -> `qathet Regional District` (Historical name update)
-  * Map `Strathcona RD` -> `Strathcona Regional District`
-  * Map `Sunshine Coast RD` -> `Sunshine Coast Regional District`
+## 1. GeoPackage Boundaries (`data/processed/bc_regional_districts_clean.gpkg`)
+* **Spatial Alignment:** Re-projected vector boundaries to **EPSG:3005** (BC Albers Equal Area).
+* **Key Spatial Identifier:** The column `ADMIN_AREA_NAME` contains official regional district names.
+* **Standardized Regional Mapping:** Standardized name variations across tabular datasets to match spatial boundary names:
+  * `Capital` → `Capital Regional District`
+  * `Metro Vancouver` → `Metro Vancouver Regional District`
+  * `Nanaimo RD` → `Regional District of Nanaimo`
+  * `Powell River RD` → `qathet Regional District`
+  * `Strathcona RD` → `Strathcona Regional District`
+  * `Sunshine Coast RD` → `Sunshine Coast Regional District`
+  * `Alberni-Clayoquot` → `Regional District of Alberni-Clayoquot`
+  * `Bulkley-Nechako` → `Regional District of Bulkley-Nechako`
+  * `Central Kootenay` → `Regional District of Central Kootenay`
+  * `Central Okanagan` → `Regional District of Central Okanagan`
+  * `East Kootenay` → `Regional District of East Kootenay`
+  * `Fraser-Fort George` → `Regional District of Fraser-Fort George`
+  * `Kitimat-Stikine` → `Regional District of Kitimat-Stikine`
+  * `Kootenay Boundary` → `Regional District of Kootenay Boundary`
+  * `Mount Waddington` → `Regional District of Mount Waddington`
+  * `North Okanagan` → `Regional District of North Okanagan`
+  * `Okanagan-Similkameen` → `Regional District of Okanagan-Similkameen`
 
 ---
 
-## 2. LAEP Average Incomes by Area (`laep-average-incomes-by-area.csv`)
-* **Header Alignment:** Column names start at Excel Row 6 (`iloc[4]`). Data begins at Excel Row 7 (`iloc[5:]`).
-* **Regional District Filter:** Filter strictly for `Geo_Type == 'RD'` to isolate the 28 Regional District aggregates and exclude provincial/EDA summaries.
-* **Target Columns:** Extract `Region Name`, `Ref_Year`, `Total`, `Tourism Total`, `Tourism: Transportation`, `Tourism: Accommodation`, `Tourism: Food and beverage`, and `Tourism: Recreation and entertainment`.
-* **Data Type Conversions:**
-  * Strip commas from income strings (`30,200` -> `30200.0`).
-  * Replace suppressed entries (`x`, `NA`, blank) with `np.nan`.
-  * Cast numeric income fields to `float64`.
+## 2. LAEP Average Incomes (`data/processed/laep_regional_incomes_tidy.csv`)
+* **Extraction:** Parsed composite header at `iloc[4]` and isolated regional district rows (`Geo_Type == 'RD'`).
+* **Unpivoting:** Reshaped wide income matrix into long format across 8 sector metrics (`Total`, `Tourism Total`, and 6 sub-sector indicators).
+* **Sanitization:** Sanitized suppressed/missing data markers (`x`, `NA`, `None`, blank) to `np.nan` and converted values to `float64`.
 
 ---
 
-## 3. Monthly Tourism Indicators (`monthly_tourism_indicators.csv`)
-* **Encoding Requirement:** Must read with `encoding='latin1'` (or `cp1252`) to avoid `UnicodeDecodeError` caused by footnote symbols (`\x86`).
-* **Header & Footer Stripping:**
-  * Strip title block (Rows 0–3) and metadata notes at the bottom.
-  * Flatten multi-tier headers across domain categories (*Traveller Entries*, *Food Services Receipts*, *Transportation Indicators*, *Tourism Sector Indicators*).
-* **Splitting Granularities:**
-  * **Annual Summary Table (Rows 5–30):** Full calendar years (`2000`–`2025`). Export as `monthly_indicators_annual_summary.csv`.
-  * **Monthly Time Series (Rows 32+):** Monthly data points (`Jan '00`, `Feb`, `Mar`...). Export as `monthly_tourism_time_series.csv`.
-* **Date Parsing Logic:**
-  * Year markers only appear on January rows (`Jan '00`). Intermediate rows (`Feb`, `Mar`) only list month abbreviations.
-  * Logic required: Extract year string `'00` -> `2000`, forward-fill across subsequent 11 months, and construct standard ISO datetime strings (`YYYY-MM-01`).
-* **Suppressed Data Handling:**
-  * Replace `'x'` (suppressed/confidential data in hotel metrics) and `'NA'` with `np.nan`.
+## 3. High-Frequency Monthly & Annual Tourism Indicators
+* **Header Building & Cleaning (`build_clean_column_headers` & `normalize_text`):**
+  * Handled encoding (`utf-8-sig` / `latin1`) and removed symbol artifacts (`\x86`, `Â`, `†`).
+  * Stripped trailing/embedded footnote indices (e.g., `Places1` → `Places`, `Index1` → `Index`, `BC2` → `BC`, `Traffic 1,2` → `Traffic`).
+  * Resolved hyphenation line-break artifacts (e.g., `Accom-modation` → `Accommodation`, `entertain-ment` → `Entertainment`).
+  * Filtered out percent change calculations to focus on primary volume/currency metrics.
+* **Date & Period Logic:** Forward-filled year contexts across monthly cycles (`Jan '00`, `Feb '00` ... `Dec '00`).
+* **Multidimensional Feature Extraction (`apply_indicator_decomposition`):**
+  * **Food Services Receipts:** Decomposed into `Region` (`BC`, `Canada`) and `Category` (`Food Services`, `Drinking Places`, `Total`).
+  * **Tourism Sector Indicators:** Decomposed into `Domain` (`Employment`, `Hotel Industry`, `Consumer Price Index`), `Sub_Indicator`, and `Unit` (`000s`, `%`, `$`, `Index`).
+  * **Transportation Indicators:** Decomposed into `Transport_Mode` (`Air Passenger Traffic`, `Ferry Traffic`), `Location` (`Vancouver`, `Victoria`, `BC Ferries`), and `Segment` (`Domestic`, `Trans-border`, `Other Int'l`, `Vehicles`, `Passengers`).
+  * **Traveller Entries:** Decomposed into `Origin_Region` (`USA`, `Overseas`, `Total`) and `Entry_Type` (`Same-day`, `Overnight`, `Asia`, `Europe`, `Other`).
 
 ---
 
-## 4. BC Stats Annual Indicators (`bc_stats_tourism_annual_indicators_tables_2026.csv`)
-* **Header/Footer Removal:** Skip initial metadata rows (`skiprows=30`) and remove trailing methodology footnotes.
-* **Methodology Break Adjustment:** Strip `***` from `'2022***'` (denotes the 2022 BC Stats Input-Output model methodology shift).
-* **Numeric Cleaning:**
-  * Remove commas (`13,495` -> `13495.0`).
-  * Convert percentage strings (`10.1%` -> `0.101`).
-* **Data Reshaping:** Unpivot wide matrix (metrics x year columns `2010`–`2024`) into a tidy, long-format DataFrame (`year`, `indicator_name`, `value`).
+## 4. BC Stats Macro Indicators (`data/processed/bc_stats_annual_indicators_tidy.csv`)
+* **Header & Break Normalization:** Dynamically located header rows, removed methodology break markers (`'2022***'` → `'2022'`), and stripped footnotes/title blocks.
+* **Filtered Calculation Noise:** Removed interleaved `% change` and footnote rows (`*Includes...`, `**Excludes...`).
+* **Reshaping:** Unpivoted metric matrix (`2010`–`2024`) into long format (`Year`, `Indicator`, `Value`).
+
+---
+
+## Output Schema Summary (`data/processed/`)
+
+| Processed Output File | Primary Structural Columns | Extracted Feature Dimensions |
+| :--- | :--- | :--- |
+| `laep_regional_incomes_tidy.csv` | `Region Name`, `Ref_Year`, `Indicator_Name`, `Value` | Regional Income by Sector |
+| `indicator_food_services_receipts_annual_tidy.csv` | `Year`, `Indicator`, `Value` | `Metric`, `Region`, `Category` |
+| `indicator_food_services_receipts_monthly_tidy.csv` | `Year`, `Period_Label`, `Indicator`, `Value` | `Metric`, `Region`, `Category` |
+| `indicator_tourism_sector_indicators_annual_tidy.csv` | `Year`, `Indicator`, `Value` | `Domain`, `Sub_Indicator`, `Unit` |
+| `indicator_tourism_sector_indicators_monthly_tidy.csv` | `Year`, `Period_Label`, `Indicator`, `Value` | `Domain`, `Sub_Indicator`, `Unit` |
+| `indicator_transportation_indicators_annual_tidy.csv` | `Year`, `Indicator`, `Value` | `Transport_Mode`, `Location`, `Segment` |
+| `indicator_transportation_indicators_monthly_tidy.csv` | `Year`, `Period_Label`, `Indicator`, `Value` | `Transport_Mode`, `Location`, `Segment` |
+| `indicator_traveller_entries_annual_tidy.csv` | `Year`, `Indicator`, `Value` | `Origin_Region`, `Entry_Type` |
+| `indicator_traveller_entries_monthly_tidy.csv` | `Year`, `Period_Label`, `Indicator`, `Value` | `Origin_Region`, `Entry_Type` |
+| `bc_stats_annual_indicators_tidy.csv` | `Year`, `Indicator`, `Value` | Macro Economic Metrics |
+| `bc_regional_districts_clean.gpkg` | Spatial Geometry (`EPSG:3005`) | Regional District Boundaries |
