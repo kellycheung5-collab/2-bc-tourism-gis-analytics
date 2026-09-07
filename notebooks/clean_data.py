@@ -3,6 +3,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from shapely.validation import make_valid
 
 # Set up project paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -29,10 +30,10 @@ def normalize_text(text: str) -> str:
     s = re.sub(r"accom-modation", "Accommodation", s, flags=re.IGNORECASE)
     s = re.sub(r"entertain-ment", "Entertainment", s, flags=re.IGNORECASE)
 
-    # Strip footnote numbers attached directly to words (e.g., Places1, Index1, meals5, BC2)
+    # Strip footnote numbers attached directly to words
     s = re.sub(r"(\b[A-Za-z]+)\d+", r"\1", s)
 
-    # Remove trailing/separated footnote indices (e.g., "Traffic 1,2")
+    # Remove trailing/separated footnote indices
     s = re.sub(r"\s+\d+,\d+", "", s)
 
     # Collapse multiple spaces into a single space
@@ -181,7 +182,6 @@ def apply_indicator_decomposition(df: pd.DataFrame, domain_name: str) -> pd.Data
         columns={"Indicator_Clean": "Indicator"}
     )
 
-    # Standardize column order (Time/Geo identifiers first, Dimension attributes next, Value last)
     base_cols = [
         c
         for c in ["Year", "Period_Label", "Ref_Year", "Region Name"]
@@ -196,11 +196,14 @@ def apply_indicator_decomposition(df: pd.DataFrame, domain_name: str) -> pd.Data
 # =============================================================================
 
 def clean_laep_income_data():
-    """Cleans LAEP regional district income data, standardizes names, and unpivots."""
-    print("Processing LAEP Average Incomes Data (Unpivoting & Standardizing)...")
-    laep_path = list(RAW_DIR.glob("laep-average-incomes*.csv"))[0]
+    """Cleans LAEP regional district average employment income data, standardizes names, and unpivots."""
+    print("Processing LAEP Average Tourism Employment Income Data...")
+    laep_files = list(RAW_DIR.glob("laep-average-incomes*.csv"))
+    if not laep_files:
+        print(" [!] Skipping: LAEP CSV file not found in data/raw/")
+        return
 
-    df_raw = pd.read_csv(laep_path)
+    df_raw = pd.read_csv(laep_files[0])
     headers = df_raw.iloc[4].values
     df = df_raw.iloc[5:].copy()
     df.columns = headers
@@ -236,13 +239,26 @@ def clean_laep_income_data():
         "Mount Waddington": "Regional District of Mount Waddington",
         "North Okanagan": "Regional District of North Okanagan",
         "Okanagan-Similkameen": "Regional District of Okanagan-Similkameen",
+        "Cariboo": "Cariboo Regional District",
+        "Central Coast RD": "Central Coast Regional District",
+        "Columbia-Shuswap": "Columbia Shuswap Regional District",
+        "Comox Valley": "Comox Valley Regional District",
+        "Cowichan Valley": "Cowichan Valley Regional District",
+        "Fraser Valley": "Fraser Valley Regional District",
+        "Peace River": "Peace River Regional District",
+        "Skeena-Queen Charlotte": "North Coast Regional District",
+        "Squamish-Lillooet": "Squamish-Lillooet Regional District",
+        "Stikine Region": "Stikine Region (Unincorporated)",
+        "Thompson-Nicola": "Thompson-Nicola Regional District",
+        "Northern Rockies RD": "Northern Rockies Regional Municipality",
     }
+
     df_rd["Region Name"] = df_rd["Region Name"].replace(name_map)
 
     df_tidy = pd.melt(
         df_rd,
         id_vars=["Region Name", "Ref_Year"],
-        value_vars=indicator_cols,
+        value_vars=[c for c in indicator_cols if c in df_rd.columns],
         var_name="Indicator_Name",
         value_name="Value",
     )
@@ -263,7 +279,7 @@ def clean_laep_income_data():
     print(f" Saved: {output_path.name} ({len(df_tidy)} rows)")
 
 
-def build_clean_column_headers(df_raw):
+def build_clean_column_headers(df_raw: pd.DataFrame) -> list:
     """Safely builds composite headers without letting section titles bleed across boundaries."""
     header_block = df_raw.iloc[0:5].astype(object).copy()
 
@@ -324,10 +340,14 @@ def build_clean_column_headers(df_raw):
 
 def clean_monthly_indicators_modular():
     """Extracts monthly and annual tourism data, normalizes strings, and decomposes dimensions."""
-    print("Processing Monthly & Annual Tourism Indicators (Extracting & Decomposing)...")
+    print("Processing Monthly & Annual Tourism Indicators...")
 
-    monthly_path = list(RAW_DIR.glob("monthly_tourism_indicators*.csv"))[0]
+    monthly_files = list(RAW_DIR.glob("monthly_tourism_indicators*.csv"))
+    if not monthly_files:
+        print(" [!] Skipping: Monthly indicators CSV not found in data/raw/")
+        return
 
+    monthly_path = monthly_files[0]
     try:
         df_raw = pd.read_csv(monthly_path, encoding="utf-8-sig", header=None)
     except UnicodeDecodeError:
@@ -352,7 +372,7 @@ def clean_monthly_indicators_modular():
         col_start = config["col_start"]
         col_end = min(config["col_end"], df_data.shape[1] - 1)
 
-        if col_start >= df_data.shape[1]:
+        if col_start >= df_data.shape[1] or period_col_idx >= df_data.shape[1]:
             continue
 
         annual_records = []
@@ -439,7 +459,6 @@ def clean_monthly_indicators_modular():
                         }
                     )
 
-        # Save & decompose Annual Tidy CSV
         if annual_records:
             df_annual = pd.DataFrame(annual_records)
             df_annual = apply_indicator_decomposition(df_annual, domain_name)
@@ -451,7 +470,6 @@ def clean_monthly_indicators_modular():
             df_annual.to_csv(annual_out, index=False)
             print(f" Saved: {annual_out.name} ({len(df_annual)} rows)")
 
-        # Save & decompose Monthly Tidy CSV
         if monthly_records:
             df_monthly = pd.DataFrame(monthly_records)
             df_monthly = apply_indicator_decomposition(df_monthly, domain_name)
@@ -463,9 +481,14 @@ def clean_monthly_indicators_modular():
 
 def clean_annual_macro_indicators():
     """Cleans provincial macro annual metrics and decomposes indicator text."""
-    print("Processing BC Stats Annual Indicators (Unpivoting & Cleaning)...")
-    annual_path = list(RAW_DIR.glob("bc_stats_tourism_annual*.csv"))[0]
+    print("Processing BC Stats Annual Indicators...")
 
+    annual_files = list(RAW_DIR.glob("bc_stats_tourism_annual*.csv"))
+    if not annual_files:
+        print(" [!] Skipping: Annual macro indicators CSV not found in data/raw/")
+        return
+
+    annual_path = annual_files[0]
     df_raw = pd.read_csv(annual_path, header=None)
 
     header_idx = None
@@ -523,7 +546,6 @@ def clean_annual_macro_indicators():
     df_tidy["Year"] = df_tidy["Year"].astype(int)
     df_tidy = df_tidy.dropna(subset=["Value"]).reset_index(drop=True)
 
-    # Standardize string representation
     df_tidy["Indicator"] = df_tidy["Indicator_Name"].apply(normalize_text)
     df_tidy = df_tidy.drop(columns=["Indicator_Name"])
 
@@ -533,24 +555,77 @@ def clean_annual_macro_indicators():
 
 
 def verify_gpkg_layer():
-    """Validates GeoPackage boundaries and exports cleaned spatial layer."""
-    print("Validating GeoPackage Boundaries...")
-    gpkg_path = list(RAW_DIR.glob("*.gpkg"))[0]
-    gdf = gpd.read_file(gpkg_path)
+    """Cleans regional districts and explicitly appends Northern Rockies with a valid Region Name."""
+    print("Processing Regional District boundaries & appending Northern Rockies...")
 
-    if gdf.crs != "EPSG:3005":
-        gdf = gdf.to_crs("EPSG:3005")
+    districts_path = RAW_DIR / "ABMS_REGIONAL_DISTRICTS_SP.gpkg"
+    muni_path = RAW_DIR / "ABMS_MUNICIPALITIES_SP.gpkg"
 
-    output_path = PROCESSED_DIR / "bc_regional_districts_clean.gpkg"
-    gdf.to_file(output_path, driver="GPKG")
-    print(f" Saved: {output_path.name} ({len(gdf)} features)")
+    if not districts_path.exists():
+        print(f" [!] Skipping: {districts_path.name} not found in data/raw/")
+        return
+
+    # 1. Load primary Regional Districts layer
+    gdf_rd = gpd.read_file(districts_path)
+
+    # Standardize column name to 'Region Name' immediately on RD layer
+    rd_name_col = "ADMIN_AREA_NAME" if "ADMIN_AREA_NAME" in gdf_rd.columns else gdf_rd.columns[0]
+    gdf_rd = gdf_rd.rename(columns={rd_name_col: "Region Name"})
+    gdf_rd["Region Name"] = gdf_rd["Region Name"].astype(str).str.strip()
+
+    # 2. Extract and append Northern Rockies from Municipalities layer
+    if muni_path.exists():
+        gdf_muni = gpd.read_file(muni_path)
+
+        # Filter for Northern Rockies features
+        nr_mask = gdf_muni["ADMIN_AREA_NAME"].str.contains(
+            "Northern Rockies", case=False, na=False
+        ) | gdf_muni["ADMIN_AREA_GROUP_NAME"].str.contains(
+            "Northern Rockies", case=False, na=False
+        )
+        gdf_nr = gdf_muni[nr_mask].copy()
+
+        if not gdf_nr.empty:
+            print(" Found Northern Rockies feature in municipalities dataset.")
+
+            # Explicitly set the 'Region Name' to match the LAEP income dataset key
+            gdf_nr["Region Name"] = "Northern Rockies Regional Municipality"
+
+            # Dissolve if Northern Rockies consists of multiple municipal features
+            gdf_nr = gdf_nr.dissolve(by="Region Name").reset_index()
+
+            # Align CRS
+            if gdf_nr.crs != gdf_rd.crs:
+                gdf_nr = gdf_nr.to_crs(gdf_rd.crs)
+
+            # Retain only matching columns to keep schema clean
+            gdf_nr = gdf_nr[["Region Name", "geometry"]]
+
+            # Remove any existing blank/dash placeholder row in gdf_rd if present
+            gdf_rd = gdf_rd[~gdf_rd["Region Name"].isin(["-", "nan", "None", ""])]
+
+            # Append Northern Rockies
+            gdf_rd = pd.concat([gdf_rd, gdf_nr], ignore_index=True)
+
+    # 3. Standardize CRS to EPSG:3005
+    if gdf_rd.crs is None or gdf_rd.crs.to_epsg() != 3005:
+        gdf_rd = gdf_rd.to_crs(epsg=3005)
+
+    # 4. Repair invalid geometries
+    invalid_mask = ~gdf_rd.geometry.is_valid
+    if invalid_mask.any():
+        gdf_rd.loc[invalid_mask, "geometry"] = gdf_rd.loc[
+            invalid_mask, "geometry"
+        ].apply(make_valid)
+
+    # Save clean complete layer
+    rd_out = PROCESSED_DIR / "bc_regional_districts_clean.gpkg"
+    gdf_rd.to_file(rd_out, driver="GPKG")
+    print(f" Saved Complete Regional District Layer: {rd_out.name} ({len(gdf_rd)} features)")
 
 
-# =============================================================================
-# PIPELINE EXECUTION
-# =============================================================================
-
-if __name__ == "__main__":
+def run_pipeline():
+    """Main execution function for the data cleaning pipeline."""
     print("=" * 60)
     print(" RUNNING BC TOURISM DATA CLEANING & FEATURE EXTRACTION PIPELINE")
     print("=" * 60)
@@ -559,3 +634,11 @@ if __name__ == "__main__":
     clean_annual_macro_indicators()
     verify_gpkg_layer()
     print("\nPipeline execution complete. All clean datasets saved in data/processed/")
+
+
+# =============================================================================
+# PIPELINE EXECUTION
+# =============================================================================
+
+if __name__ == "__main__":
+    run_pipeline()

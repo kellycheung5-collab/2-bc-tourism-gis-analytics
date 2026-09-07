@@ -160,10 +160,10 @@ def test_build_clean_column_headers():
     mock_raw = pd.DataFrame(
         [
             ["Period", "Food Services Receipts", "Food Services Receipts"],
-            [None, "British Columbia", "Canada"],
-            [None, "Food Services", "Drinking Places"],
-            [None, None, None],
-            [None, None, None],
+            [np.nan, "British Columbia", "Canada"],
+            [np.nan, "Food Services", "Drinking Places"],
+            [np.nan, np.nan, np.nan],
+            [np.nan, np.nan, np.nan],
         ]
     )
 
