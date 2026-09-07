@@ -169,7 +169,12 @@ def format_growth_table(df: pd.DataFrame) -> str:
     return formatted.to_string(index=False)
 
 
-if __name__ == "__main__":
+def run_regional_analysis():
+    """Executes regional tourism income summaries, rankings, and growth rate computations."""
+    print("=" * 65)
+    print(" EXECUTING REGIONAL TOURISM INCOME ANALYSIS")
+    print("=" * 65)
+
     gdf = load_joined_dataset()
 
     print("\nTop 5 Regional Districts by Average Tourism Employment Income in 2020:")
@@ -183,3 +188,7 @@ if __name__ == "__main__":
     print("\nTop 5 Fastest Growing Tourism Employment Income Districts (2010-2020):")
     growth_df = compute_growth_rates(gdf, indicator="Tourism Total")
     print(format_growth_table(growth_df.head(5)))
+
+
+if __name__ == "__main__":
+    run_regional_analysis()

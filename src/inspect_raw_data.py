@@ -104,6 +104,11 @@ def inspect_geopackage():
         print("\n")
 
 
-if __name__ == "__main__":
+def inspect_all_raw_data():
+    """Master entrypoint to inspect both CSV and GeoPackage raw datasets."""
     inspect_csv_files()
     inspect_geopackage()
+
+
+if __name__ == "__main__":
+    inspect_all_raw_data()

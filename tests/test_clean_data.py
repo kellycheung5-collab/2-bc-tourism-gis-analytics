@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from notebooks.clean_data import (
+from src.clean_data import (
     apply_indicator_decomposition,
     build_clean_column_headers,
     decompose_food_services,

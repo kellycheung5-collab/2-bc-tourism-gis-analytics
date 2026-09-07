@@ -23,9 +23,8 @@ def generate_choropleth_map(
     year: int = 2020,
     output_filename: str = "regional_tourism_income_2020.png",
 ):
-    """Generate production-ready choropleth map with customized label placement and callouts."""
-    
-    # Standardize column search across raw and cleaned schema variants
+    """Generate production-ready choropleth map with customized label placement, callouts, and capped vlim scale."""
+
     ind_col = "Indicator" if "Indicator" in gdf.columns else "Indicator_Name"
     year_col = "Ref_Year" if "Ref_Year" in gdf.columns else "Year"
 
@@ -35,33 +34,42 @@ def generate_choropleth_map(
         print(f"No data available for indicator '{indicator}' and year {year}.")
         return
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 14))
+    fig, ax = plt.subplots(1, 1, figsize=(16, 14), dpi=300)
 
     # Base boundary layer
     base_gdf.plot(
         ax=ax,
-        color="#f2f2f2",
-        edgecolor="#b0b0b0",
-        linewidth=0.5,
+        color="#f4f4f6",
+        edgecolor="#a0a0a0",
+        linewidth=0.6,
         linestyle="--",
     )
 
-    # Choropleth thematic layer
-    subset.plot(
+    # Choropleth thematic layer (Explicitly setting vmin and vmax=48000)
+    subset_plot = subset.plot(
         column="Value",
         cmap="YlGnBu",
+        vmin=subset["Value"].min(),
+        vmax=48000,
         legend=True,
         legend_kwds={
-            "label": f"Average Tourism Employment Income ($ CAD)",
+            "label": "Average Tourism Employment Income ($ CAD)",
             "orientation": "horizontal",
-            "pad": 0.025,
-            "shrink": 0.55,
-            "aspect": 30,
+            "pad": 0.08,
+            "shrink": 0.48,
+            "aspect": 25,
         },
         ax=ax,
-        edgecolor="#333333",
-        linewidth=0.5,
+        edgecolor="#222222",
+        linewidth=0.6,
     )
+
+    # Colorbar label & tick contrast formatting
+    cbar_ax = fig.axes[-1]
+    cbar_ax.tick_params(labelsize=10, colors="#2D3748")
+    cbar_ax.xaxis.label.set_size(11)
+    cbar_ax.xaxis.label.set_color("#2D3748")
+    cbar_ax.xaxis.label.set_weight("bold")
 
     CONGESTED_REGIONS = {
         "Alberni-Clayoquot": "1",
@@ -81,7 +89,6 @@ def generate_choropleth_map(
         "Sunshine Coast": "15",
     }
 
-    # Badge coordinate adjustments (CRS units / meters)
     BADGE_ADJUSTMENTS = {
         "Capital": (24000, -22000),
         "Cowichan Valley": (0, 6000),
@@ -89,7 +96,6 @@ def generate_choropleth_map(
         "Sunshine Coast": (-6000, -14000),
     }
 
-    # Text label coordinate adjustments
     TEXT_LABEL_OFFSETS = {
         "Stikine Region (Unincorporated)": (-200000, 120000),
         "Peace River": (-40000, 85000),
@@ -122,24 +128,27 @@ def generate_choropleth_map(
             dx, dy = BADGE_ADJUSTMENTS.get(label, (0, 0))
             px, py = base_point.x + dx, base_point.y + dy
 
-            pad_val = 0.12 if len(num_id) > 1 else 0.20
+            pad_val = 0.16 if len(num_id) > 1 else 0.22
 
-            ax.annotate(
+            ann = ax.annotate(
                 text=num_id,
                 xy=(px, py),
                 ha="center",
                 va="center",
-                fontsize=5.5,
+                fontsize=6.5,
                 fontweight="bold",
                 color="#8b0000",
                 bbox=dict(
                     boxstyle=f"circle,pad={pad_val}",
-                    facecolor="white",
+                    facecolor="#ffffff",
                     edgecolor="#8b0000",
-                    linewidth=0.7,
-                    alpha=0.95,
+                    linewidth=1.0,
+                    alpha=0.98,
                 ),
             )
+            ann.set_path_effects([
+                path_effects.withSimplePatchShadow(offset=(1, -1), shadow_rgbFace="black", alpha=0.3)
+            ])
         else:
             dx, dy = TEXT_LABEL_OFFSETS.get(label, (0, 0))
             px, py = base_point.x + dx, base_point.y + dy
@@ -149,12 +158,12 @@ def generate_choropleth_map(
                 xy=(px, py),
                 ha="center",
                 va="center",
-                fontsize=7.5,
+                fontsize=8.5,
                 fontweight="bold",
                 color="#111111",
             )
             ann.set_path_effects([
-                path_effects.withStroke(linewidth=2.2, foreground="white")
+                path_effects.withStroke(linewidth=3.0, foreground="white")
             ])
 
     # Southwestern Districts Key Table
@@ -173,56 +182,75 @@ def generate_choropleth_map(
         cellText=table_data,
         colLabels=[" Southwestern Districts Key", ""],
         loc="lower left",
-        bbox=[0.01, 0.06, 0.28, 0.16],
+        bbox=[0.01, 0.05, 0.30, 0.18],
         cellLoc="left",
     )
 
     table.auto_set_font_size(False)
-    table.set_fontsize(6.5)
+    table.set_fontsize(7.5)
 
     for col in (0, 1):
         cell = table[(0, col)]
-        cell.set_facecolor("#e2e2e2")
-        cell.set_edgecolor("#cccccc")
+        cell.set_facecolor("#d8d8d8")
+        cell.set_edgecolor("#a0a0a0")
         if col == 0:
             cell.get_text().set_fontweight("bold")
-            cell.get_text().set_fontsize(7.0)
+            cell.get_text().set_fontsize(8.0)
 
     for row in range(1, len(table_data) + 1):
         for col in (0, 1):
             cell = table[(row, col)]
-            cell.set_facecolor("white")
+            cell.set_facecolor("#ffffff")
             cell.set_edgecolor("#e0e0e0")
-            cell.set_linewidth(0.5)
+            cell.set_linewidth(0.6)
 
     ax.set_title(
         f"British Columbia Regional Districts: Average Tourism Employment Income ({year})",
         fontsize=16,
-        pad=15,
+        pad=18,
         fontweight="bold",
+        color="#1A202C",
     )
     ax.set_axis_off()
 
+    # Explanatory footnote for pandemic compositional spike
+    fig.text(
+        0.01,
+        0.01,
+        "Source: Statistics Canada / BC Stats. Note: Northern Rockies RM 2020 spike reflects a pandemic compositional effect (layoffs of lower-wage/part-time staff), not structural wage growth.",
+        fontsize=9,
+        color="#4A5568",
+    )
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Save raster (PNG)
     png_path = OUTPUT_DIR / output_filename
-    plt.tight_layout()
-    plt.savefig(png_path, dpi=300, bbox_inches="tight")
-    
-    # Save vector (PDF)
     pdf_path = png_path.with_suffix(".pdf")
-    plt.savefig(pdf_path, bbox_inches="tight")
-    
+
+    plt.tight_layout()
+    plt.savefig(png_path, dpi=300, bbox_inches="tight", pad_inches=0.2)
+    plt.savefig(pdf_path, bbox_inches="tight", pad_inches=0.2)
     plt.close()
-    print(f"Map rendered successfully:\n - {png_path}\n - {pdf_path}")
+
+    print(f"Map saved:\n - {png_path}\n - {pdf_path}")
+
+
+def render_choropleth_maps():
+    try:
+        from src.regional_analysis import load_base_boundaries, load_joined_dataset
+    except ImportError:
+        from regional_analysis import load_base_boundaries, load_joined_dataset
+
+    gdf = load_joined_dataset()
+    base_gdf = load_base_boundaries()
+
+    generate_choropleth_map(
+        gdf=gdf,
+        base_gdf=base_gdf,
+        indicator="Tourism Total",
+        year=2020,
+        output_filename="regional_tourism_income_2020.png",
+    )
 
 
 if __name__ == "__main__":
-    try:
-        from regional_analysis import load_base_boundaries, load_joined_dataset
-        gdf = load_joined_dataset()
-        base_gdf = load_base_boundaries()
-        generate_choropleth_map(gdf, base_gdf, indicator="Tourism Total", year=2020)
-    except ImportError:
-        print("Run `visualizations.py` from the root pipeline module or via `main.py`.")
+    render_choropleth_maps()

@@ -72,14 +72,19 @@ def perform_regional_spatial_join() -> gpd.GeoDataFrame:
 
     print("\n" + "-" * 65)
     print(f"Successfully created joined spatial layer:")
-    print(f" Output File    : {output_path.name}")
-    print(f" Total Features : {len(joined_gdf)}")
-    print(f" Unique Regions : {joined_gdf[join_key].nunique()}")
-    print(f" Active CRS     : {joined_gdf.crs}")
+    print(f" Output File     : {output_path.name}")
+    print(f" Total Features  : {len(joined_gdf)}")
+    print(f" Unique Regions  : {joined_gdf[join_key].nunique()}")
+    print(f" Active CRS      : {joined_gdf.crs}")
     print("-" * 65)
 
     return joined_gdf
 
 
+def run_spatial_analysis() -> gpd.GeoDataFrame:
+    """Wrapper entry point for running spatial analysis tasks in main.py."""
+    return perform_regional_spatial_join()
+
+
 if __name__ == "__main__":
-    perform_regional_spatial_join()
+    run_spatial_analysis()
