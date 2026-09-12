@@ -158,9 +158,11 @@ __marimo__/
 # Custom Exclusions
 # --------------------------------------------------
 
-# Raw and processed datasets
-data/raw/
-data/processed/
+# Ignore the contents of the folders
+data/raw/*
+data/processed/*
+
+# Explicitly whitelist file types
 !data/raw/*.gpkg
 !data/raw/*.csv
 !data/processed/*.png
@@ -170,6 +172,5 @@ data/processed/
 *.shx
 *.dbf
 *.prj
-*.gpkg
 *.geojson
 *.kml
