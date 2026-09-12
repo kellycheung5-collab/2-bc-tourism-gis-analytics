@@ -158,9 +158,12 @@ __marimo__/
 # Custom Exclusions
 # --------------------------------------------------
 
-# Raw and processed datasets (keep local)
+# Raw and processed datasets
 data/raw/
 data/processed/
+!data/raw/*.gpkg
+!data/raw/*.csv
+!data/processed/*.png
 
 # GIS boundary files & spatial data formats
 *.shp
